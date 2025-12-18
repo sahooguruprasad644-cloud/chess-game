@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Chess Trainer - Laddu Edition</title>
+
+<style>
+body {
+  background: radial-gradient(circle, #111, #000);
+  color: white;
+  text-align: center;
+  font-family: 'Segoe UI', Tahoma, sans-serif;
+  margin: 0;
+  padding: 20px;
+  overflow-x: hidden;
+}
+
+/* Header area for the difficulty selector */
+.controls {
+  margin-bottom: 20px;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 15px;
+  display: inline-block;
+  border-radius: 10px;
+  border: 1px solid gold;
+}
+
+select {
+  padding: 10px;
+  font-size: 18px;
+  border-radius: 5px;
+  background: #222;
+  color: gold;
+  border: 1px solid gold;
+  cursor: pointer;
+  outline: none;
+}
+
+#hint {
+  font-size: 24px;
+  margin: 10px 0;
+  color: #00ffcc;
+  min-height: 35px;
+  font-weight: bold;
+}
+
+/* BIGGER BOARD */
+#board {
+  display: grid;
+  grid-template-columns: repeat(8, 90px);
+  width: 720px;
+  margin: 0 auto;
+  border: 8px solid gold;
+  user-select: none;
+  box-shadow: 0 0 50px rgba(255, 215, 0, 0.3);
+}
+
+.square {
+  width: 90px;
+  height: 90px;
+  font-size: 60px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+
+.white { background: #f0f0f0; color: #222; }
+.black { background: #444; color: #fff; }
+
+.selected { 
+  outline: 6px solid gold; 
+  z-index: 10;
+  background-color: rgba(255, 215, 0, 0.5) !important;
+}
+
+/* Victory Popup */
+#victory {
+  display: none;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(0,0,0,0.98);
+  padding: 60px;
+  border: 6px solid gold;
+  border-radius: 30px;
+  font-size: 40px;
+  color: gold;
+  z-index: 1000;
+  animation: pop 1s infinite alternate;
+  box-shadow: 0 0 100px gold;
+}
+
+@keyframes pop {
+  from { transform: translate(-50%, -50%) scale(1); }
+  to { transform: translate(-50%, -50%) scale(1.05); }
+}
+
+.firework {
+  position: fixed;
+  font-size: 40px;
+  animation: explode 1s forwards;
+  pointer-events: none;
+}
+
+@keyframes explode {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(5); }
+}
+
+.btn {
+  margin-top: 30px;
+  font-size: 24px;
+  padding: 15px 40px;
+  cursor: pointer;
+  background: gold;
+  color: black;
+  border: none;
+  border-radius: 10px;
+  font-weight: bold;
+}
+</style>
+</head>
+
+<body>
+
+<div class="controls">
+  <label style="font-size: 20px; margin-right: 10px;">Select Mode:</label>
+  <select id="diff">
+    <option value="easy">Easy (AI sleeps)</option>
+    <option value="medium" selected>Medium (AI tries)</option>
+    <option value="hard">Hard (AI blocks)</option>
+  </select>
+</div>
+
+<div id="hint">Your turn! Select a white piece.</div>
+
+<div id="board"></div>
+
+<div id="victory">
+🎉 YEAHHHH LADDU YOU WON 🥳  
+<br>PROUD OF YOU 😘 MUWAAAH 💋
+<br><button class="btn" onclick="location.reload()">Play Again</button>
+</div>
+
+<script>
+const boardEl = document.getElementById("board");
+const hintEl = document.getElementById("hint");
+const victoryEl = document.getElementById("victory");
+const diffSelect = document.getElementById("diff");
+
+let board = [
+ "rnbqkbnr",
+ "pppppppp",
+ "........",
+ "........",
+ "........",
+ "........",
+ "PPPPPPPP",
+ "RNBQKBNR"
+];
+
+let selected = null;
+let gameOver = false;
+
+const pieces = {
+ "P":"♙","p":"♟", "R":"♖","r":"♜", "N":"♘","n":"♞",
+ "B":"♗","b":"♝", "Q":"♕","q":"♛", "K":"♔","k":"♚"
+};
+
+function draw() {
+ boardEl.innerHTML="";
+ board.forEach((row, r) => {
+  row.split("").forEach((p, c) => {
+   const d = document.createElement("div");
+   let isSelected = (selected && selected.r === r && selected.c === c);
+   d.className = "square " + ((r+c)%2 ? "black" : "white");
+   if(isSelected) d.classList.add("selected");
+   if(p !== ".") d.textContent = pieces[p];
+   d.onclick = () => click(r, c);
+   boardEl.appendChild(d);
+  });
+ });
+}
+
+function click(r, c) {
+ if(gameOver) return;
+ let piece = board[r][c];
+ let isWhite = piece >= "A" && piece <= "Z";
+
+ if(isWhite) {
+   selected = {r, c};
+   hintEl.textContent = "Great choice! Now pick a square.";
+   draw();
+   return;
+ }
+
+ if(selected) {
+   move(selected.r, selected.c, r, c);
+   selected = null;
+   draw();
+ }
+}
+
+function move(sr, sc, tr, tc) {
+ let p = board[sr][sc];
+ if(p == "P" && tr == 0) { p = "Q"; hintEl.textContent = "Pawn promoted to Queen!"; }
+
+ board[sr] = replace(board[sr], sc, ".");
+ board[tr] = replace(board[tr], tc, p);
+
+ if(checkVictory()) return;
+ hintEl.textContent = "AI is thinking...";
+ setTimeout(aiMove, 600);
+}
+
+function aiMove() {
+ if(gameOver) return;
+ let level = diffSelect.value;
+ let captureMoves = [], normalMoves = [];
+
+ for(let r=0; r<7; r++) {
+  for(let c=0; c<8; c++) {
+   if(board[r][c] == "p") {
+    // Check for captures (Only takes White Pawns 'P')
+    [c-1, c+1].forEach(tc => {
+        if(tc >= 0 && tc <= 7 && board[r+1][tc] === "P") captureMoves.push([r, c, r+1, tc]);
+    });
+    // Check for forward move
+    if(board[r+1][c] == ".") normalMoves.push([r, c, r+1, c]);
+   }
+  }
+ }
+
+ let finalMove = null;
+ if(level === "easy") {
+    if(captureMoves.length > 0 && Math.random() < 0.15) finalMove = captureMoves[Math.floor(Math.random()*captureMoves.length)];
+    else if(normalMoves.length > 0) finalMove = normalMoves[Math.floor(Math.random()*normalMoves.length)];
+ } else if(level === "medium") {
+    if(captureMoves.length > 0 && Math.random() < 0.5) finalMove = captureMoves[Math.floor(Math.random()*captureMoves.length)];
+    else if(normalMoves.length > 0) finalMove = normalMoves[Math.floor(Math.random()*normalMoves.length)];
+ } else {
+    // Hard: Usually takes pawns if it can
+    if(captureMoves.length > 0 && Math.random() < 0.9) finalMove = captureMoves[Math.floor(Math.random()*captureMoves.length)];
+    else if(normalMoves.length > 0) finalMove = normalMoves[Math.floor(Math.random()*normalMoves.length)];
+ }
+
+ if(finalMove) {
+  board[finalMove[0]] = replace(board[finalMove[0]], finalMove[1], ".");
+  board[finalMove[2]] = replace(board[finalMove[2]], finalMove[3], "p");
+ }
+ draw();
+ hintEl.textContent = getHint();
+ checkVictory();
+}
+
+function getHint() {
+ return ["You've got this, Laddu!", "Beautiful move!", "Keep the pressure on!", "Victory is coming!"][Math.floor(Math.random()*4)];
+}
+
+function checkVictory() {
+ let bk = false;
+ board.forEach(r => { if(r.includes("k")) bk = true; });
+ if(!bk) {
+  gameOver = true;
+  victoryEl.style.display = "block";
+  hintEl.textContent = "👑 YOU ARE THE CHAMPION!";
+  fireworks();
+  return true;
+ }
+ return false;
+}
+
+function fireworks() {
+ let count = 0;
+ let interval = setInterval(() => {
+     for(let i=0; i<8; i++) {
+      let f = document.createElement("div");
+      f.className = "firework";
+      f.textContent = ["🎆","✨","💖","🎉","❤️","🔥"][Math.floor(Math.random()*6)];
+      f.style.left = Math.random()*100 + "vw";
+      f.style.top = Math.random()*100 + "vh";
+      document.body.appendChild(f);
+      setTimeout(() => f.remove(), 1000);
+     }
+     count++;
+     if(count > 30) clearInterval(interval); 
+ }, 200);
+}
+
+function replace(s, i, c) { return s.substring(0, i) + c + s.substring(i+1); }
+
+draw();
+</script>
+
+</body>
+</html>
